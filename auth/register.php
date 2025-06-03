@@ -1,4 +1,7 @@
 <?php
+require_once __DIR__ . '/../vendor/autoload.php';
+use Firebase\JWT\JWT;
+
 // Header access is required
 header("Access-Control-Allow-Origin: *");
 header("Access-Control-Allow-Methods: POST, GET, OPTIONS, DELETE");
@@ -11,6 +14,8 @@ error_reporting(E_ALL);
 
 // Connection access
 require_once('../conn/connection.php');
+
+$secret_key = "supersecretkey123";
 
 // Timezone UTC WIB
 date_default_timezone_set('Asia/Jakarta');
@@ -43,56 +48,97 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             try {
                 $pdo -> beginTransaction();
 
-                $stmt1 = $pdo->prepare("
-                    INSERT INTO \"User\" (id, username, firstname, phone, createdat)
-                    VALUES (:id, :username, :firstname, :phone, :currenttimezone)
-                ");
-
-                $stmt1->execute([
-                    ':id' => $user_id,
+                $stmt = $pdo->prepare("SELECT id, username, firstname FROM \"User\" WHERE username = :username or phone = :phone");
+                $stmt->execute([
                     ':username' => $username,
-                    ':firstname' => $firstname,
-                    ':phone' => $phone_number,
-                    ':currenttimezone' => $current_timezone
+                    ':phone' => $phone_number
                 ]);
+                $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
-                $id_password = substr("up" . bin2hex(random_bytes(7)), 0, 15);
+                //Exists user
+                if ($user) {
 
-                $stmt2 = $pdo->prepare("
-                    INSERT INTO user_password (id, userid, password, createdat)
-                    VALUES (:upid, :userid, :password, :currenttimezone)
-                ");
+                    http_response_code(404);
+                    echo json_encode([
+                        'status' => 404,
+                        'message' => 'Not Found',
+                        'response' => [
+                            'message' => 'Account has been registered !!'
+                        ]
+                    ]);
 
-                $stmt2->execute([
-                    ':upid' => $id_password,
-                    ':userid' => $user_id,
-                    ':password' => $password,
-                    ':currenttimezone' => $current_timezone
-                ]);
+                } else {
+                    $stmt1 = $pdo->prepare("
+                        INSERT INTO \"User\" (id, username, firstname, phone, createdat)
+                        VALUES (:id, :username, :firstname, :phone, :currenttimezone)
+                    ");
 
-                $id_role = substr("ur" . bin2hex(random_bytes(7)), 0, 15);
+                    $stmt1->execute([
+                        ':id' => $user_id,
+                        ':username' => $username,
+                        ':firstname' => $firstname,
+                        ':phone' => $phone_number,
+                        ':currenttimezone' => $current_timezone
+                    ]);
 
-                $stmt3 = $pdo->prepare("
-                    INSERT INTO user_role (id, userid, roleid)
-                    VALUES (:urid, :userid, :role)
-                ");
+                    $id_password = substr("up" . bin2hex(random_bytes(7)), 0, 15);
 
-                $stmt3->execute([
-                    ':urid' => $id_role,
-                    ':userid' => $user_id,
-                    ':role' => $role
-                ]);
+                    $stmt2 = $pdo->prepare("
+                        INSERT INTO user_password (id, userid, password, createdat)
+                        VALUES (:upid, :userid, :password, :currenttimezone)
+                    ");
 
-                $pdo->commit();
+                    $stmt2->execute([
+                        ':upid' => $id_password,
+                        ':userid' => $user_id,
+                        ':password' => $password,
+                        ':currenttimezone' => $current_timezone
+                    ]);
 
-                http_response_code(201);
-                echo json_encode([
-                    'status' => 201,
-                    'message' => 'Success',
-                    'response' => [
-                        'message' => "$username account has been successfully created"
-                    ]
-                ]);
+                    $id_role = substr("ur" . bin2hex(random_bytes(7)), 0, 15);
+
+                    $stmt3 = $pdo->prepare("
+                        INSERT INTO user_role (id, userid, roleid)
+                        VALUES (:urid, :userid, :role)
+                    ");
+
+                    $stmt3->execute([
+                        ':urid' => $id_role,
+                        ':userid' => $user_id,
+                        ':role' => $role
+                    ]);
+
+                    $pdo->commit();
+
+                    $issuedAt = time();
+                    $expiration = $issuedAt + 10800;
+
+                    $payload = [
+                        'iat' => $issuedAt,
+                        'exp' => $expiration,
+                        'user_id' => $user_id,
+                        'username' => $username,
+                        'firstname' => $firstname
+                    ];
+
+                    $jwt = JWT::encode($payload, $secret_key, 'HS256');
+
+                    http_response_code(201);
+                    echo json_encode([
+                        'status' => 201,
+                        'message' => 'Success',
+                        'response' => [
+                            'token' => $jwt,
+                            'login_time' => $issuedAt,
+                            'expired_time' => $expiration,
+                            'data' => [
+                                'username' => $username,
+                                'phone' => $phone_number
+                            ]
+                        ]
+                    ]);
+                }
+
             } catch (PDOException $e) {
                 http_response_code(500);
                 echo json_encode([

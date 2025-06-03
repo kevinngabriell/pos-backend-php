@@ -40,7 +40,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if ($passData && password_verify($password, $passData['password'])) {
                     // 3. Buat JWT token
                     $issuedAt = time();
-                    $expiration = $issuedAt + 3600; // 1 jam
+                    $expiration = $issuedAt + 10800; 
 
                     $payload = [
                         'iat' => $issuedAt,
@@ -56,12 +56,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     http_response_code(200);
                     echo json_encode([
                         'status' => 200,
-                        'message' => 'Login successful',
-                        'user' => [
-                            'id' => $user['id'],
-                            'username' => $user['username'],
-                            'firstname' => $user['firstname'],
+                        'message' => 'Register success',
+                        'response' => [
                             'token' => $jwt,
+                            'data' => [
+                                'username' => $username,
+                            ]
                         ]
                     ]);
                 } else {
